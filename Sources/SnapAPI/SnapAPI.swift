@@ -148,6 +148,53 @@ public final class SnapAPI {
         return try await postJSON(path: "/v1/analyze", body: options)
     }
 
+
+    // MARK: - Video  POST /v1/video
+
+    /// Record a video (WebM/MP4/GIF) of a live webpage.
+    ///
+    /// Returns raw binary `Data` when `options.responseType` is `nil` or `"binary"`.
+    /// Use ``videoResult(_:)`` to get structured ``VideoResult`` metadata instead.
+    ///
+    /// - Parameter options: Must include `url`.
+    /// - Returns: Binary video data.
+    public func video(_ options: VideoOptions) async throws -> Data {
+        guard !options.url.isEmpty else {
+            throw SnapAPIError.invalidParameters("url is required.")
+        }
+        var opts = options
+        opts.responseType = "binary"
+        return try await post(path: "/v1/video", body: opts)
+    }
+
+    /// Record a video and return structured ``VideoResult`` metadata.
+    public func videoResult(_ options: VideoOptions) async throws -> VideoResult {
+        guard !options.url.isEmpty else {
+            throw SnapAPIError.invalidParameters("url is required.")
+        }
+        var opts = options
+        opts.responseType = "json"
+        return try await postJSON(path: "/v1/video", body: opts)
+    }
+
+    // MARK: - Ping  GET /v1/ping
+
+    /// Check API availability.
+    ///
+    /// - Returns: ``PingResult`` with `status` and `timestamp`.
+    public func ping() async throws -> PingResult {
+        return try await getJSON(path: "/v1/ping")
+    }
+
+    // MARK: - Account Usage  GET /v1/usage
+
+    /// Get account-level API usage for the current billing period.
+    ///
+    /// - Returns: ``AccountUsage`` with `used`, `limit`, and `remaining`.
+    public func usage() async throws -> AccountUsage {
+        return try await getJSON(path: "/v1/usage")
+    }
+
     // MARK: - Storage  /v1/storage/*
 
     /// List all stored files.

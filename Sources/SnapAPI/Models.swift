@@ -339,3 +339,76 @@ public struct AnyCodable: Codable {
         }
     }
 }
+
+// MARK: - Video
+
+/// Easing function for scroll animation in video recording.
+public enum ScrollEasing: String, Codable, Sendable {
+    case linear             = "linear"
+    case easeIn             = "ease_in"
+    case easeOut            = "ease_out"
+    case easeInOut          = "ease_in_out"
+    case easeInOutQuint     = "ease_in_out_quint"
+}
+
+/// Output format for video recordings.
+public enum VideoFormat: String, Codable, Sendable {
+    case webm = "webm"
+    case mp4  = "mp4"
+    case gif  = "gif"
+}
+
+/// Options for ``SnapAPI/video(_:)``.
+public struct VideoOptions: Encodable, Sendable {
+    public var url: String
+    public var format: VideoFormat?
+    public var width: Int?
+    public var height: Int?
+    public var duration: Int?
+    public var fps: Int?
+    public var scrolling: Bool?
+    public var scrollSpeed: Int?
+    public var scrollDelay: Int?
+    public var scrollDuration: Int?
+    public var scrollBy: Int?
+    public var scrollEasing: ScrollEasing?
+    public var scrollBack: Bool?
+    public var scrollComplete: Bool?
+    public var darkMode: Bool?
+    public var blockAds: Bool?
+    public var blockCookieBanners: Bool?
+    public var delay: Int?
+    /// `"binary"` returns raw `Data`; `"base64"` / `"json"` returns ``VideoResult``.
+    public var responseType: String?
+
+    public init(url: String) { self.url = url }
+}
+
+/// Returned by ``SnapAPI/video(_:)`` when `responseType` is `"base64"` or `"json"`.
+public struct VideoResult: Decodable, Sendable {
+    public let data: String
+    public let mimeType: String
+    public let format: VideoFormat
+    public let width: Int
+    public let height: Int
+    public let duration: Int
+    public let size: Int
+}
+
+// MARK: - Account Usage
+
+/// Returned by ``SnapAPI/usage()``.
+public struct AccountUsage: Decodable, Sendable {
+    public let used: Int
+    public let limit: Int
+    public let remaining: Int
+    public let resetAt: String?
+}
+
+// MARK: - Ping
+
+/// Returned by ``SnapAPI/ping()``.
+public struct PingResult: Decodable, Sendable {
+    public let status: String
+    public let timestamp: Int64
+}
