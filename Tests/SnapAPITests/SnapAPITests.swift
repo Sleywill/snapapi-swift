@@ -151,4 +151,89 @@ final class SnapAPITests: XCTestCase {
         let decoded = try JSONDecoder().decode([String: AnyCodable].self, from: json)
         XCTAssertNotNil(decoded["empty"])
     }
+
+    // MARK: - Convenience Method Tests
+
+    func testPDFConvenienceSetsFormatToPDF() async {
+        let api = SnapAPI(apiKey: "test")
+        // pdf() convenience wraps screenshot() — should still require a source
+        do {
+            _ = try await api.pdf(ScreenshotOptions())
+            XCTFail("Expected invalidParameters error")
+        } catch SnapAPIError.invalidParameters(let msg) {
+            XCTAssertTrue(
+                msg.contains("url") || msg.contains("html") || msg.contains("markdown"),
+                "Error message should mention missing source: \(msg)"
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testVideoOptionsRequiresURL() async {
+        let api = SnapAPI(apiKey: "test")
+        do {
+            _ = try await api.video(VideoOptions(url: ""))
+            XCTFail("Expected invalidParameters error")
+        } catch SnapAPIError.invalidParameters {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testVideoResultRequiresURL() async {
+        let api = SnapAPI(apiKey: "test")
+        do {
+            _ = try await api.videoResult(VideoOptions(url: ""))
+            XCTFail("Expected invalidParameters error")
+        } catch SnapAPIError.invalidParameters {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testScreenshotToStorageRequiresSource() async {
+        let api = SnapAPI(apiKey: "test")
+        do {
+            _ = try await api.screenshotToStorage(ScreenshotOptions())
+            XCTFail("Expected invalidParameters error")
+        } catch SnapAPIError.invalidParameters {
+            // expected
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    // MARK: - SnapAPIError Pattern Matching Tests
+
+    func testNetworkErrorPatternMatch() {
+        let err = SnapAPIError.networkError(underlying: URLError(.cancelled))
+        if case .networkError = err {
+            // correct pattern match
+        } else {
+            XCTFail("Expected networkError case")
+        }
+    }
+
+    func testInvalidParametersCarriesMessage() {
+        let msg = "url is required."
+        let err = SnapAPIError.invalidParameters(msg)
+        if case .invalidParameters(let m) = err {
+            XCTAssertEqual(m, msg)
+        } else {
+            XCTFail("Expected invalidParameters case")
+        }
+    }
+
+    func testServiceUnavailableIsRetryable() {
+        let err = SnapAPIError.apiError(code: "SERVICE_UNAVAILABLE", message: "Down", statusCode: 503)
+        XCTAssertTrue(err.isRetryable, "5xx errors should be retryable")
+    }
+
+    func testUnauthorizedIsNotRetryable() {
+        let err = SnapAPIError.apiError(code: "UNAUTHORIZED", message: "No key", statusCode: 401)
+        XCTAssertFalse(err.isRetryable, "401 should not be retryable")
+    }
 }
