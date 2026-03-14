@@ -1,347 +1,280 @@
 import Foundation
 
-/// SnapAPI — Official Swift SDK
+// MARK: - SnapAPIClient
+
+/// Thread-safe SnapAPI client.
 ///
-/// All methods are async and throw ``SnapAPIError``.
+/// `SnapAPIClient` is an `actor`, so all calls are automatically serialised on
+/// Swift's cooperative thread pool.  You can create a single shared instance
+/// and call it from any Swift concurrency context.
 ///
 /// ```swift
-/// let api = SnapAPI(apiKey: "your-api-key")
+/// let client = SnapAPIClient(apiKey: "sk_your_key")
 ///
-/// let imageData = try await api.screenshot(
-///     ScreenshotOptions(url: "https://example.com")
-/// )
+/// // Screenshot
+/// let png = try await client.screenshot(ScreenshotOptions(url: "https://example.com"))
+///
+/// // Scrape
+/// let page = try await client.scrape(ScrapeOptions(url: "https://example.com"))
+///
+/// // Extract
+/// let md = try await client.extract(ExtractOptions(url: "https://news.ycombinator.com"))
+///
+/// // Quota
+/// let q = try await client.quota()
+/// print("Used: \(q.used) / \(q.total)")
 /// ```
-public final class SnapAPI {
+///
+/// All methods throw ``SnapAPIError``. Handle errors with a typed `catch`:
+///
+/// ```swift
+/// do {
+///     let data = try await client.screenshot(opts)
+/// } catch SnapAPIError.rateLimited(let retryAfter) {
+///     print("Retry in \(retryAfter)s")
+/// } catch SnapAPIError.quotaExceeded {
+///     print("Upgrade your plan")
+/// }
+/// ```
+public actor SnapAPIClient {
 
-    // MARK: - Configuration
+    // MARK: - Private state
 
-    private let apiKey: String
-    private let baseURL: URL
-    private let session: URLSession
+    private let http: HTTPClient
+    private let builder: RequestBuilder
 
-    private static let defaultBaseURL = URL(string: "https://api.snapapi.pics")!
-    private static let userAgent      = "snapapi-swift/2.0.0"
+    // MARK: - Defaults
+
+    private static let defaultBaseURL = URL(string: "https://snapapi.pics")!
 
     // MARK: - Init
 
     /// Create a SnapAPI client.
+    ///
     /// - Parameters:
-    ///   - apiKey:  Your SnapAPI key.
-    ///   - baseURL: Override the base URL (useful for testing).
-    ///   - session: Override the URLSession (useful for testing).
+    ///   - apiKey:      Your SnapAPI key (starts with `sk_`).
+    ///   - baseURL:     Override the API base URL. Useful for testing.
+    ///   - session:     Override the `URLSession`. Useful for testing.
+    ///   - retryPolicy: Retry behaviour for transient errors.
     public init(
         apiKey: String,
-        baseURL: URL = SnapAPI.defaultBaseURL,
-        session: URLSession = .shared
+        baseURL: URL = SnapAPIClient.defaultBaseURL,
+        session: URLSession = .shared,
+        retryPolicy: RetryPolicy = .default
     ) {
-        self.apiKey  = apiKey
-        self.baseURL = baseURL
-        self.session = session
+        self.builder = RequestBuilder(baseURL: baseURL, apiKey: apiKey)
+        self.http    = HTTPClient(session: session, retryPolicy: retryPolicy)
     }
 
     // MARK: - Screenshot  POST /v1/screenshot
 
-    /// Capture a screenshot.
+    /// Capture a screenshot of a URL, HTML snippet, or Markdown string.
     ///
-    /// Returns raw PNG/JPEG/WEBP/AVIF/PDF bytes.
-    /// When `options.storage` is set the API returns JSON; use
-    /// ``screenshotToStorage(_:)`` instead.
+    /// Returns raw binary image data (PNG, JPEG, WEBP, AVIF) or PDF bytes.
     ///
-    /// - Parameter options: Must have at least `url`, `html`, or `markdown`.
-    /// - Returns: Binary image (or PDF) data.
+    /// - Parameter options: At least one of `url`, `html`, or `markdown` must be set.
+    /// - Returns: Binary image or PDF data.
+    /// - Throws: ``SnapAPIError``
     public func screenshot(_ options: ScreenshotOptions) async throws -> Data {
         guard options.url != nil || options.html != nil || options.markdown != nil else {
             throw SnapAPIError.invalidParameters("One of url, html, or markdown is required.")
         }
-        return try await post(path: "/v1/screenshot", body: options)
+        let req = try builder.post(path: "/v1/screenshot", body: options)
+        return try await http.data(for: req)
     }
 
-    /// Capture a screenshot and upload it to storage.
+    /// Capture a screenshot and upload it to the configured storage backend.
     ///
-    /// - Returns: ``StorageUploadResult`` with `id` and `url`.
+    /// - Returns: ``StorageUploadResult`` containing the file `id` and public `url`.
+    /// - Throws: ``SnapAPIError``
     public func screenshotToStorage(_ options: ScreenshotOptions) async throws -> StorageUploadResult {
         guard options.url != nil || options.html != nil || options.markdown != nil else {
             throw SnapAPIError.invalidParameters("One of url, html, or markdown is required.")
         }
-        return try await postJSON(path: "/v1/screenshot", body: options)
+        let req = try builder.post(path: "/v1/screenshot", body: options)
+        return try await http.json(for: req)
     }
 
-    /// Convenience: generate a PDF (forces `format = "pdf"`).
-    public func pdf(_ options: ScreenshotOptions) async throws -> Data {
-        var opts = options
-        opts.format = "pdf"
-        return try await screenshot(opts)
+    // MARK: - PDF  POST /v1/pdf
+
+    /// Generate a PDF of a URL.
+    ///
+    /// ```swift
+    /// var opts = PdfOptions(url: "https://example.com")
+    /// opts.pageFormat = .a4
+    /// let pdfData = try await client.pdf(opts)
+    /// ```
+    ///
+    /// - Parameter options: PDF rendering options. `url` is required.
+    /// - Returns: Raw PDF bytes.
+    /// - Throws: ``SnapAPIError``
+    public func pdf(_ options: PdfOptions) async throws -> Data {
+        guard !options.url.isEmpty else {
+            throw SnapAPIError.invalidParameters("url is required.")
+        }
+        let req = try builder.post(path: "/v1/pdf", body: options)
+        return try await http.data(for: req)
+    }
+
+    /// Convenience: generate a PDF from a screenshot options object.
+    ///
+    /// Forces `format = .pdf` and calls `POST /v1/screenshot`.
+    public func pdfFromScreenshot(_ options: ScreenshotOptions) async throws -> Data {
+        guard options.url != nil || options.html != nil || options.markdown != nil else {
+            throw SnapAPIError.invalidParameters("One of url, html, or markdown is required.")
+        }
+        var opts   = options
+        opts.format = .pdf
+        let req = try builder.post(path: "/v1/screenshot", body: opts)
+        return try await http.data(for: req)
     }
 
     // MARK: - Scrape  POST /v1/scrape
 
     /// Scrape text, HTML, or links from a URL.
     ///
-    /// - Parameter options: Must include `url`.
-    /// - Returns: ``ScrapeResult`` with an array of page results.
+    /// ```swift
+    /// var opts = ScrapeOptions(url: "https://example.com")
+    /// opts.selector = "article"
+    /// let result = try await client.scrape(opts)
+    /// print(result.results.first?.data ?? "")
+    /// ```
+    ///
+    /// - Parameter options: Scrape options. `url` is required.
+    /// - Returns: ``ScrapeResult`` with one ``ScrapeItem`` per page.
+    /// - Throws: ``SnapAPIError``
     public func scrape(_ options: ScrapeOptions) async throws -> ScrapeResult {
         guard !options.url.isEmpty else {
             throw SnapAPIError.invalidParameters("url is required.")
         }
-        return try await postJSON(path: "/v1/scrape", body: options)
+        let req = try builder.post(path: "/v1/scrape", body: options)
+        return try await http.json(for: req)
     }
 
     // MARK: - Extract  POST /v1/extract
 
     /// Extract structured content from a webpage.
     ///
-    /// - Parameter options: Must include `url`.
-    /// - Returns: ``ExtractResult``.
+    /// ```swift
+    /// var opts = ExtractOptions(url: "https://techcrunch.com/some-article")
+    /// opts.format = .markdown
+    /// let result = try await client.extract(opts)
+    /// ```
+    ///
+    /// - Parameter options: Extract options. `url` is required.
+    /// - Returns: ``ExtractResult`` with the requested content.
+    /// - Throws: ``SnapAPIError``
     public func extract(_ options: ExtractOptions) async throws -> ExtractResult {
         guard !options.url.isEmpty else {
             throw SnapAPIError.invalidParameters("url is required.")
         }
-        return try await postJSON(path: "/v1/extract", body: options)
+        let req = try builder.post(path: "/v1/extract", body: options)
+        return try await http.json(for: req)
     }
 
-    /// Convenience: extract as Markdown.
+    // MARK: - Extract convenience methods
+
+    /// Extract page content as Markdown.
     public func extractMarkdown(url: String) async throws -> ExtractResult {
-        var opts = ExtractOptions(url: url); opts.type = "markdown"
+        var opts = ExtractOptions(url: url); opts.format = .markdown
         return try await extract(opts)
     }
 
-    /// Convenience: extract article content.
+    /// Extract article body text.
     public func extractArticle(url: String) async throws -> ExtractResult {
-        var opts = ExtractOptions(url: url); opts.type = "article"
+        var opts = ExtractOptions(url: url); opts.format = .article
         return try await extract(opts)
     }
 
-    /// Convenience: extract plain text.
+    /// Extract plain text.
     public func extractText(url: String) async throws -> ExtractResult {
-        var opts = ExtractOptions(url: url); opts.type = "text"
+        var opts = ExtractOptions(url: url); opts.format = .text
         return try await extract(opts)
     }
 
-    /// Convenience: extract links.
+    /// Extract all hyperlinks.
     public func extractLinks(url: String) async throws -> ExtractResult {
-        var opts = ExtractOptions(url: url); opts.type = "links"
+        var opts = ExtractOptions(url: url); opts.format = .links
         return try await extract(opts)
     }
 
-    /// Convenience: extract images.
+    /// Extract all image URLs.
     public func extractImages(url: String) async throws -> ExtractResult {
-        var opts = ExtractOptions(url: url); opts.type = "images"
+        var opts = ExtractOptions(url: url); opts.format = .images
         return try await extract(opts)
     }
 
-    /// Convenience: extract metadata.
+    /// Extract page metadata (Open Graph, meta tags).
     public func extractMetadata(url: String) async throws -> ExtractResult {
-        var opts = ExtractOptions(url: url); opts.type = "metadata"
+        var opts = ExtractOptions(url: url); opts.format = .metadata
         return try await extract(opts)
     }
-
-    // MARK: - Analyze  POST /v1/analyze
-
-    /// Perform AI-powered analysis of a webpage.
-    ///
-    /// - Parameter options: Must include `url`. Requires a provider API key.
-    /// - Returns: ``AnalyzeResult`` with AI-generated analysis.
-    public func analyze(_ options: AnalyzeOptions) async throws -> AnalyzeResult {
-        guard !options.url.isEmpty else {
-            throw SnapAPIError.invalidParameters("url is required.")
-        }
-        return try await postJSON(path: "/v1/analyze", body: options)
-    }
-
 
     // MARK: - Video  POST /v1/video
 
-    /// Record a video (WebM/MP4/GIF) of a live webpage.
+    /// Record a video of a live webpage.
     ///
-    /// Returns raw binary `Data` when `options.responseType` is `nil` or `"binary"`.
-    /// Use ``videoResult(_:)`` to get structured ``VideoResult`` metadata instead.
+    /// Returns raw binary video data. For structured metadata, use
+    /// ``videoResult(_:)``.
     ///
-    /// - Parameter options: Must include `url`.
-    /// - Returns: Binary video data.
+    /// - Parameter options: Video options. `url` is required.
+    /// - Returns: Raw video bytes.
+    /// - Throws: ``SnapAPIError``
     public func video(_ options: VideoOptions) async throws -> Data {
         guard !options.url.isEmpty else {
             throw SnapAPIError.invalidParameters("url is required.")
         }
-        var opts = options
-        opts.responseType = "binary"
-        return try await post(path: "/v1/video", body: opts)
+        var opts = options; opts.responseType = "binary"
+        let req = try builder.post(path: "/v1/video", body: opts)
+        return try await http.data(for: req)
     }
 
-    /// Record a video and return structured ``VideoResult`` metadata.
+    /// Record a video and return structured metadata including a base64-encoded
+    /// video payload.
+    ///
+    /// - Parameter options: Video options. `url` is required.
+    /// - Returns: ``VideoResult`` with metadata and base64-encoded data.
+    /// - Throws: ``SnapAPIError``
     public func videoResult(_ options: VideoOptions) async throws -> VideoResult {
         guard !options.url.isEmpty else {
             throw SnapAPIError.invalidParameters("url is required.")
         }
-        var opts = options
-        opts.responseType = "json"
-        return try await postJSON(path: "/v1/video", body: opts)
+        var opts = options; opts.responseType = "json"
+        let req = try builder.post(path: "/v1/video", body: opts)
+        return try await http.json(for: req)
+    }
+
+    // MARK: - Quota  GET /v1/quota
+
+    /// Fetch the account's API usage quota for the current billing period.
+    ///
+    /// ```swift
+    /// let q = try await client.quota()
+    /// print("Used: \(q.used) / \(q.total)  —  resets \(q.resetAt ?? "?")")
+    /// ```
+    ///
+    /// - Returns: ``QuotaResult`` with `used`, `total`, and `remaining` counts.
+    /// - Throws: ``SnapAPIError``
+    public func quota() async throws -> QuotaResult {
+        let req = builder.get(path: "/v1/quota")
+        return try await http.json(for: req)
     }
 
     // MARK: - Ping  GET /v1/ping
 
-    /// Check API availability.
+    /// Check API health.
     ///
     /// - Returns: ``PingResult`` with `status` and `timestamp`.
+    /// - Throws: ``SnapAPIError``
     public func ping() async throws -> PingResult {
-        return try await getJSON(path: "/v1/ping")
-    }
-
-    // MARK: - Account Usage  GET /v1/usage
-
-    /// Get account-level API usage for the current billing period.
-    ///
-    /// - Returns: ``AccountUsage`` with `used`, `limit`, and `remaining`.
-    public func usage() async throws -> AccountUsage {
-        return try await getJSON(path: "/v1/usage")
-    }
-
-    // MARK: - Storage  /v1/storage/*
-
-    /// List all stored files.
-    public func listStorageFiles() async throws -> StorageFilesResult {
-        try await getJSON(path: "/v1/storage/files")
-    }
-
-    /// Delete a stored file by ID.
-    public func deleteStorageFile(id: String) async throws {
-        try await delete(path: "/v1/storage/files/\(id)")
-    }
-
-    /// Get storage usage statistics.
-    public func storageUsage() async throws -> StorageUsageResult {
-        try await getJSON(path: "/v1/storage/usage")
-    }
-
-    /// Configure an S3-compatible storage backend.
-    public func configureS3(_ config: S3Config) async throws {
-        _ = try await post(path: "/v1/storage/s3", body: config)
-    }
-
-    /// Test the configured S3 connection.
-    public func testS3() async throws {
-        _ = try await postRaw(path: "/v1/storage/s3/test", body: Empty())
-    }
-
-    // MARK: - Scheduled  /v1/scheduled/*
-
-    /// Create a scheduled screenshot job.
-    public func createScheduled(_ options: ScheduledOptions) async throws -> ScheduledJob {
-        try await postJSON(path: "/v1/scheduled", body: options)
-    }
-
-    /// List all scheduled jobs.
-    public func listScheduled() async throws -> ScheduledListResult {
-        try await getJSON(path: "/v1/scheduled")
-    }
-
-    /// Delete a scheduled job.
-    public func deleteScheduled(id: String) async throws {
-        try await delete(path: "/v1/scheduled/\(id)")
-    }
-
-    // MARK: - Webhooks  /v1/webhooks/*
-
-    /// Register a new webhook.
-    public func createWebhook(_ options: WebhookOptions) async throws -> Webhook {
-        try await postJSON(path: "/v1/webhooks", body: options)
-    }
-
-    /// List all registered webhooks.
-    public func listWebhooks() async throws -> WebhooksListResult {
-        try await getJSON(path: "/v1/webhooks")
-    }
-
-    /// Delete a webhook.
-    public func deleteWebhook(id: String) async throws {
-        try await delete(path: "/v1/webhooks/\(id)")
-    }
-
-    // MARK: - API Keys  /v1/keys/*
-
-    /// List all API keys.
-    public func listKeys() async throws -> KeysListResult {
-        try await getJSON(path: "/v1/keys")
-    }
-
-    /// Create a new API key.
-    public func createKey(name: String) async throws -> APIKey {
-        try await postJSON(path: "/v1/keys", body: ["name": name])
-    }
-
-    /// Revoke an API key.
-    public func deleteKey(id: String) async throws {
-        try await delete(path: "/v1/keys/\(id)")
-    }
-
-    // MARK: - HTTP internals
-
-    private func buildRequest(method: String, path: String) -> URLRequest {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
-        req.httpMethod = method
-        req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(SnapAPI.userAgent, forHTTPHeaderField: "User-Agent")
-        return req
-    }
-
-    private func execute(_ request: URLRequest) async throws -> Data {
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw SnapAPIError.networkError(underlying: error)
-        }
-
-        guard let http = response as? HTTPURLResponse else {
-            throw SnapAPIError.httpError(statusCode: 0, body: "No HTTP response")
-        }
-
-        if http.statusCode >= 400 {
-            throw parseAPIError(data: data, statusCode: http.statusCode)
-        }
-        return data
-    }
-
-    /// POST with Encodable body, returns raw Data.
-    private func post<B: Encodable>(path: String, body: B) async throws -> Data {
-        var req = buildRequest(method: "POST", path: path)
-        req.httpBody = try JSONEncoder().encode(body)
-        return try await execute(req)
-    }
-
-    /// POST with raw Data body.
-    private func postRaw<B: Encodable>(path: String, body: B) async throws -> Data {
-        try await post(path: path, body: body)
-    }
-
-    /// POST with Encodable body, decode response as R.
-    private func postJSON<B: Encodable, R: Decodable>(path: String, body: B) async throws -> R {
-        let data = try await post(path: path, body: body)
-        return try decode(data)
-    }
-
-    /// GET, decode response as R.
-    private func getJSON<R: Decodable>(path: String) async throws -> R {
-        let req = buildRequest(method: "GET", path: path)
-        let data = try await execute(req)
-        return try decode(data)
-    }
-
-    /// DELETE (ignores response body).
-    private func delete(path: String) async throws {
-        let req = buildRequest(method: "DELETE", path: path)
-        _ = try await execute(req)
-    }
-
-    private func decode<R: Decodable>(_ data: Data) throws -> R {
-        do {
-            return try JSONDecoder().decode(R.self, from: data)
-        } catch {
-            throw SnapAPIError.decodingError(underlying: error)
-        }
+        let req = builder.get(path: "/v1/ping")
+        return try await http.json(for: req)
     }
 }
 
-// Empty body for parameter-less POST requests.
-private struct Empty: Encodable {}
+// MARK: - Backwards-compatible type alias
+
+/// Type alias preserving the original `SnapAPI` name from v2.
+///
+/// New code should use ``SnapAPIClient``.
+public typealias SnapAPI = SnapAPIClient

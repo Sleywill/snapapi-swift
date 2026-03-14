@@ -1,57 +1,203 @@
 # SnapAPI Swift SDK
 
-[![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?style=flat-square&logo=swift&logoColor=white)](https://swift.org)
+[![Swift 5.9+](https://img.shields.io/badge/Swift-5.9+-F05138?style=flat-square&logo=swift&logoColor=white)](https://swift.org)
 [![SPM](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-FA7343?style=flat-square)](https://swift.org/package-manager/)
+[![CI](https://github.com/Sleywill/snapapi-swift/actions/workflows/ci.yml/badge.svg)](https://github.com/Sleywill/snapapi-swift/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-Official Swift SDK for [SnapAPI](https://snapapi.pics) — screenshot, PDF generation, and web content extraction.
+Official Swift SDK for [SnapAPI.pics](https://snapapi.pics) — screenshot, scrape, extract, and PDF generation as a service.
+
+**v3.0.0** — Actor-based, strict concurrency, zero third-party dependencies.
+
+## Requirements
+
+| Platform | Minimum |
+|----------|---------|
+| macOS    | 12.0    |
+| iOS      | 15.0    |
+| watchOS  | 8.0     |
+| tvOS     | 15.0    |
+| Swift    | 5.9     |
 
 ## Installation
 
 ### Swift Package Manager
 
-Add to your `Package.swift`:
-
 ```swift
-dependencies: [
-    .package(url: "https://github.com/Sleywill/snapapi-swift", from: "1.0.0")
-]
+// Package.swift
+.package(url: "https://github.com/Sleywill/snapapi-swift", from: "3.0.0")
 ```
 
-Or in Xcode: **File → Add Package Dependencies** and enter the repo URL.
+Or via Xcode: **File > Add Package Dependencies**, enter the repository URL.
 
-## Quick Start
+## Quickstart
 
 ```swift
 import SnapAPI
 
-let client = SnapAPIClient(apiKey: "your_api_key")
+let client = SnapAPIClient(apiKey: "sk_your_key")
 
-// Take a screenshot
-let screenshot = try await client.screenshot(
-    url: "https://example.com",
-    options: .init(width: 1280, height: 800, format: .png)
-)
+// Screenshot
+let png = try await client.screenshot(ScreenshotOptions(url: "https://example.com"))
 
-// Generate a PDF
-let pdf = try await client.pdf(
-    url: "https://example.com",
-    options: .init(format: .a4, landscape: false)
-)
+// Scrape
+let page = try await client.scrape(ScrapeOptions(url: "https://example.com"))
+print(page.results.first?.data ?? "")
+
+// Extract as Markdown
+let md = try await client.extractMarkdown(url: "https://example.com")
+
+// PDF
+let pdfData = try await client.pdf(PdfOptions(url: "https://example.com"))
+
+// Quota
+let q = try await client.quota()
+print("Used: \(q.used) / \(q.total)")
 ```
 
-## Features
+## Endpoints
 
-- 📸 **Screenshots** — Full page, viewport, or element-specific
-- 📄 **PDF Generation** — With custom headers, footers, and page formats
-- 🎬 **Video Capture** — Record page interactions
-- 🔍 **Content Extraction** — Structured data from any web page
-- 🤖 **AI Analysis** — Intelligent web content understanding
+### Screenshot — `POST /v1/screenshot`
 
-## Documentation
+```swift
+var opts = ScreenshotOptions(url: "https://example.com")
+opts.format   = .png        // .png | .jpeg | .webp | .avif | .pdf
+opts.fullPage = true
+opts.width    = 1440
+opts.darkMode = true
+opts.blockAds = true
 
-Full API documentation: [snapapi.pics/docs](https://snapapi.pics/docs)
+let imageData = try await client.screenshot(opts)
+try imageData.write(to: URL(fileURLWithPath: "shot.png"))
+```
+
+Capture from raw HTML or Markdown:
+
+```swift
+let png = try await client.screenshot(ScreenshotOptions(html: "<h1>Hello</h1>"))
+```
+
+### PDF — `POST /v1/pdf`
+
+```swift
+var opts = PdfOptions(url: "https://example.com")
+opts.pageFormat = .a4       // .a4 | .letter | .a3 | .legal | .tabloid
+opts.landscape  = false
+
+let pdfBytes = try await client.pdf(opts)
+```
+
+### Scrape — `POST /v1/scrape`
+
+```swift
+var opts = ScrapeOptions(url: "https://example.com")
+opts.selector = "article"
+opts.wait     = 1000        // ms to wait for dynamic content
+
+let result = try await client.scrape(opts)
+for item in result.results {
+    print("Page \(item.page): \(item.data)")
+}
+```
+
+### Extract — `POST /v1/extract`
+
+```swift
+// Convenience wrappers
+let markdown = try await client.extractMarkdown(url: "https://example.com")
+let article  = try await client.extractArticle(url: "https://example.com")
+let text     = try await client.extractText(url: "https://example.com")
+let links    = try await client.extractLinks(url: "https://example.com")
+let images   = try await client.extractImages(url: "https://example.com")
+let metadata = try await client.extractMetadata(url: "https://example.com")
+
+// Full control
+var opts = ExtractOptions(url: "https://example.com")
+opts.format    = .markdown
+opts.maxLength = 4096
+let result = try await client.extract(opts)
+```
+
+### Quota — `GET /v1/quota`
+
+```swift
+let quota = try await client.quota()
+print("Used: \(quota.used) / \(quota.total) — \(quota.remaining) remaining")
+```
+
+## Error Handling
+
+All methods throw `SnapAPIError`:
+
+```swift
+do {
+    let data = try await client.screenshot(opts)
+} catch SnapAPIError.unauthorized {
+    // Invalid or revoked API key
+} catch SnapAPIError.rateLimited(let retryAfter) {
+    // Respect the server's retry window
+    try await Task.sleep(for: .seconds(retryAfter))
+} catch SnapAPIError.quotaExceeded {
+    // Upgrade plan at snapapi.pics/dashboard
+} catch SnapAPIError.serverError(let statusCode, let message) {
+    print("Server error \(statusCode): \(message)")
+} catch SnapAPIError.networkError(let underlying) {
+    print("Network: \(underlying.localizedDescription)")
+} catch SnapAPIError.invalidParameters(let msg) {
+    print("Bad params: \(msg)")
+}
+```
+
+## Retry Policy
+
+The client retries transient errors (rate limits, 5xx responses, network failures)
+with exponential backoff. The `Retry-After` header is always respected.
+
+```swift
+// Custom policy
+let client = SnapAPIClient(
+    apiKey: "sk_...",
+    retryPolicy: RetryPolicy(
+        maxAttempts: 5,
+        baseDelay: 2.0,   // seconds for first retry
+        maxDelay: 60.0    // maximum wait per attempt
+    )
+)
+
+// Disable retries
+let strict = SnapAPIClient(apiKey: "sk_...", retryPolicy: .never)
+```
+
+## Thread Safety
+
+`SnapAPIClient` is an `actor`. You can share a single instance across your entire
+app without any additional locking:
+
+```swift
+// Defined once at app level
+let snapClient = SnapAPIClient(apiKey: "sk_...")
+
+// Called concurrently from any task
+async let a = snapClient.screenshot(optsA)
+async let b = snapClient.screenshot(optsB)
+let (imgA, imgB) = try await (a, b)
+```
+
+## Testing
+
+Inject a mock `URLSession` to test without network calls:
+
+```swift
+let session = MockURLSession(statusCode: 200, data: fakeResponseData)
+let client  = SnapAPIClient(apiKey: "test", session: session, retryPolicy: .never)
+```
+
+Run tests:
+
+```bash
+swift test
+```
 
 ## License
 
-MIT © [Alex Serebriakov](https://github.com/Sleywill)
+MIT. See [LICENSE](LICENSE).

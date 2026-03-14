@@ -1,67 +1,84 @@
 // BasicExample.swift
-// Run: swift Examples/BasicExample.swift (not supported — paste into Xcode Playground or a Command-line tool target)
+// Demonstrates common SnapAPI Swift SDK usage patterns.
+//
+// To run: add this file to a Command-line tool Xcode target, or use a
+// Swift package executable target.
+//
+// Environment variable: SNAPAPI_KEY=sk_your_key
 
 import Foundation
 import SnapAPI
 
 @main
 struct BasicExample {
-    static func main() async throws {
-        let apiKey = ProcessInfo.processInfo.environment["SNAPAPI_KEY"] ?? "your-api-key"
-        let api    = SnapAPI(apiKey: apiKey)
+    static func main() async {
+        let apiKey = ProcessInfo.processInfo.environment["SNAPAPI_KEY"] ?? "sk_your_key"
+        let client = SnapAPIClient(apiKey: apiKey)
 
-        // ── Screenshot ──────────────────────────────────────────────────────────
-        print("Taking screenshot...")
-        var screenshotOpts = ScreenshotOptions(url: "https://example.com")
-        screenshotOpts.format   = "png"
-        screenshotOpts.fullPage = true
-        screenshotOpts.width    = 1280
-
-        let imageData = try await api.screenshot(screenshotOpts)
-        try imageData.write(to: URL(fileURLWithPath: "screenshot.png"))
-        print("Saved screenshot.png (\(imageData.count) bytes)")
-
-        // ── PDF ─────────────────────────────────────────────────────────────────
-        print("Generating PDF...")
-        var pdfOpts = ScreenshotOptions(url: "https://example.com")
-        var pdfPage = PDFPageOptions(); pdfPage.pageSize = "A4"
-        pdfOpts.pdf = pdfPage
-
-        let pdfData = try await api.pdf(pdfOpts)
-        try pdfData.write(to: URL(fileURLWithPath: "page.pdf"))
-        print("Saved page.pdf (\(pdfData.count) bytes)")
-
-        // ── Scrape ──────────────────────────────────────────────────────────────
-        print("Scraping...")
-        var scrapeOpts  = ScrapeOptions(url: "https://example.com")
-        scrapeOpts.type = "text"
-
-        let scrapeResult = try await api.scrape(scrapeOpts)
-        for item in scrapeResult.results {
-            print("Page \(item.page): \(item.data.prefix(60))...")
+        do {
+            try await runExamples(client: client)
+        } catch SnapAPIError.unauthorized {
+            print("ERROR: invalid API key — set SNAPAPI_KEY environment variable")
+        } catch SnapAPIError.rateLimited(let retryAfter) {
+            print("ERROR: rate limited — retry after \(Int(retryAfter))s")
+        } catch SnapAPIError.quotaExceeded {
+            print("ERROR: quota exceeded — upgrade at snapapi.pics/dashboard")
+        } catch SnapAPIError.serverError(let code, let msg) {
+            print("ERROR: server error \(code): \(msg)")
+        } catch {
+            print("ERROR: \(error)")
         }
-
-        // ── Extract ─────────────────────────────────────────────────────────────
-        print("Extracting article...")
-        let article = try await api.extractArticle(url: "https://example.com")
-        print("Extracted type=\(article.type) in \(article.responseTime)ms")
-
-        // ── List Keys ───────────────────────────────────────────────────────────
-        print("Listing API keys...")
-        let keys = try await api.listKeys()
-        for key in keys.keys {
-            print("  \(key.name) (id=\(key.id))")
-        }
-
-        // ── Scheduled ───────────────────────────────────────────────────────────
-        print("Creating scheduled job...")
-        let job = try await api.createScheduled(
-            ScheduledOptions(url: "https://example.com", cronExpression: "0 * * * *")
-        )
-        print("Created job id=\(job.id)")
-        try await api.deleteScheduled(id: job.id)
-        print("Deleted job.")
-
-        print("\nDone!")
     }
+}
+
+private func runExamples(client: SnapAPIClient) async throws {
+
+    // ── Quota check ────────────────────────────────────────────────────────
+    let q = try await client.quota()
+    print("Quota: \(q.used)/\(q.total) used (resets: \(q.resetAt ?? "unknown"))")
+
+    // ── Screenshot ─────────────────────────────────────────────────────────
+    print("\nTaking screenshot...")
+    var screenshotOpts = ScreenshotOptions(url: "https://example.com")
+    screenshotOpts.format   = .png
+    screenshotOpts.fullPage = true
+    screenshotOpts.width    = 1440
+
+    let imageData = try await client.screenshot(screenshotOpts)
+    try imageData.write(to: URL(fileURLWithPath: "screenshot.png"))
+    print("Saved screenshot.png (\(imageData.count) bytes)")
+
+    // ── PDF ────────────────────────────────────────────────────────────────
+    print("\nGenerating PDF...")
+    var pdfOpts = PdfOptions(url: "https://example.com")
+    pdfOpts.pageFormat = .a4
+
+    let pdfData = try await client.pdf(pdfOpts)
+    try pdfData.write(to: URL(fileURLWithPath: "page.pdf"))
+    print("Saved page.pdf (\(pdfData.count) bytes)")
+
+    // ── Scrape ─────────────────────────────────────────────────────────────
+    print("\nScraping...")
+    var scrapeOpts    = ScrapeOptions(url: "https://example.com")
+    scrapeOpts.selector = "body"
+
+    let scrapeResult = try await client.scrape(scrapeOpts)
+    for item in scrapeResult.results {
+        let preview = String(item.data.prefix(80))
+        print("  Page \(item.page): \(preview)...")
+    }
+
+    // ── Extract ────────────────────────────────────────────────────────────
+    print("\nExtracting article...")
+    let article = try await client.extractArticle(url: "https://example.com")
+    print("  type=\(article.type)  responseTime=\(article.responseTime)ms")
+
+    // ── Extract Markdown ───────────────────────────────────────────────────
+    print("\nExtracting as Markdown...")
+    let md = try await client.extractMarkdown(url: "https://example.com")
+    if let text = md.data?.value as? String {
+        print("  \(String(text.prefix(120)))...")
+    }
+
+    print("\nDone.")
 }

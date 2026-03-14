@@ -4,8 +4,10 @@ import PackageDescription
 let package = Package(
     name: "SnapAPI",
     platforms: [
-        .iOS(.v15),
         .macOS(.v12),
+        .iOS(.v15),
+        .watchOS(.v8),
+        .tvOS(.v15),
     ],
     products: [
         .library(
@@ -17,7 +19,10 @@ let package = Package(
         .target(
             name: "SnapAPI",
             dependencies: [],
-            path: "Sources/SnapAPI"
+            path: "Sources/SnapAPI",
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
         ),
         .testTarget(
             name: "SnapAPITests",
