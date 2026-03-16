@@ -45,7 +45,6 @@ public actor SnapAPIClient {
 
     // MARK: - Defaults
 
-    private static let defaultBaseURL = URL(string: "https://snapapi.pics")!
 
     // MARK: - Init
 
@@ -58,7 +57,7 @@ public actor SnapAPIClient {
     ///   - retryPolicy: Retry behaviour for transient errors.
     public init(
         apiKey: String,
-        baseURL: URL = SnapAPIClient.defaultBaseURL,
+        baseURL: URL = URL(string: "https://api.snapapi.pics")!,
         session: URLSession = .shared,
         retryPolicy: RetryPolicy = .default
     ) {
@@ -93,6 +92,20 @@ public actor SnapAPIClient {
         }
         let req = try builder.post(path: "/v1/screenshot", body: options)
         return try await http.json(for: req)
+    }
+
+    /// Capture a screenshot and write it directly to a file.
+    ///
+    /// - Parameters:
+    ///   - options: Screenshot options.
+    ///   - fileURL: The local file URL to write the image data to.
+    /// - Returns: The number of bytes written.
+    /// - Throws: ``SnapAPIError``
+    @discardableResult
+    public func screenshotToFile(_ options: ScreenshotOptions, path fileURL: URL) async throws -> Int {
+        let data = try await screenshot(options)
+        try data.write(to: fileURL)
+        return data.count
     }
 
     // MARK: - PDF  POST /v1/pdf
@@ -210,6 +223,33 @@ public actor SnapAPIClient {
         return try await extract(opts)
     }
 
+    // MARK: - Analyze  POST /v1/analyze
+
+    /// Analyze a webpage using an LLM provider.
+    ///
+    /// This endpoint extracts content from the URL and sends it to an LLM for
+    /// analysis. It may return HTTP 503 when LLM credits are exhausted
+    /// server-side.
+    ///
+    /// ```swift
+    /// var opts = AnalyzeOptions(url: "https://example.com")
+    /// opts.prompt   = "Summarize this page"
+    /// opts.provider = .openai
+    /// let result = try await client.analyze(opts)
+    /// print(result.result)
+    /// ```
+    ///
+    /// - Parameter options: Analyze options. `url` is required.
+    /// - Returns: ``AnalyzeResult`` with the LLM analysis.
+    /// - Throws: ``SnapAPIError``
+    public func analyze(_ options: AnalyzeOptions) async throws -> AnalyzeResult {
+        guard !options.url.isEmpty else {
+            throw SnapAPIError.invalidParameters("url is required.")
+        }
+        let req = try builder.post(path: "/v1/analyze", body: options)
+        return try await http.json(for: req)
+    }
+
     // MARK: - Video  POST /v1/video
 
     /// Record a video of a live webpage.
@@ -258,6 +298,14 @@ public actor SnapAPIClient {
     public func quota() async throws -> QuotaResult {
         let req = builder.get(path: "/v1/quota")
         return try await http.json(for: req)
+    }
+
+    /// Alias for ``quota()`` matching the `GET /v1/usage` endpoint name.
+    ///
+    /// - Returns: ``QuotaResult`` with `used`, `total`, and `remaining` counts.
+    /// - Throws: ``SnapAPIError``
+    public func getUsage() async throws -> QuotaResult {
+        return try await quota()
     }
 
     // MARK: - Ping  GET /v1/ping

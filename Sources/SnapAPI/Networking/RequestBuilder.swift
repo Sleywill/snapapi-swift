@@ -35,7 +35,7 @@ struct RequestBuilder {
         let url = URL(string: urlString) ?? baseURL
         var req = URLRequest(url: url, timeoutInterval: 120)
         req.httpMethod = method
-        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")

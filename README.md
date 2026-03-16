@@ -5,9 +5,9 @@
 [![CI](https://github.com/Sleywill/snapapi-swift/actions/workflows/ci.yml/badge.svg)](https://github.com/Sleywill/snapapi-swift/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-Official Swift SDK for [SnapAPI.pics](https://snapapi.pics) — screenshot, scrape, extract, and PDF generation as a service.
+Official Swift SDK for [SnapAPI.pics](https://snapapi.pics) -- screenshot, scrape, extract, analyze, and PDF generation as a service.
 
-**v3.0.0** — Actor-based, strict concurrency, zero third-party dependencies.
+**v3.0.0** -- Actor-based, strict concurrency, zero third-party dependencies.
 
 ## Requirements
 
@@ -40,6 +40,12 @@ let client = SnapAPIClient(apiKey: "sk_your_key")
 // Screenshot
 let png = try await client.screenshot(ScreenshotOptions(url: "https://example.com"))
 
+// Screenshot to file
+try await client.screenshotToFile(
+    ScreenshotOptions(url: "https://example.com"),
+    path: URL(fileURLWithPath: "shot.png")
+)
+
 // Scrape
 let page = try await client.scrape(ScrapeOptions(url: "https://example.com"))
 print(page.results.first?.data ?? "")
@@ -50,14 +56,19 @@ let md = try await client.extractMarkdown(url: "https://example.com")
 // PDF
 let pdfData = try await client.pdf(PdfOptions(url: "https://example.com"))
 
-// Quota
-let q = try await client.quota()
+// Analyze (LLM-powered)
+var analyzeOpts = AnalyzeOptions(url: "https://example.com")
+analyzeOpts.prompt = "Summarize this page"
+let analysis = try await client.analyze(analyzeOpts)
+
+// Usage / Quota
+let q = try await client.getUsage()
 print("Used: \(q.used) / \(q.total)")
 ```
 
 ## Endpoints
 
-### Screenshot — `POST /v1/screenshot`
+### Screenshot -- `POST /v1/screenshot`
 
 ```swift
 var opts = ScreenshotOptions(url: "https://example.com")
@@ -77,7 +88,17 @@ Capture from raw HTML or Markdown:
 let png = try await client.screenshot(ScreenshotOptions(html: "<h1>Hello</h1>"))
 ```
 
-### PDF — `POST /v1/pdf`
+Save directly to a file:
+
+```swift
+let bytes = try await client.screenshotToFile(
+    ScreenshotOptions(url: "https://example.com"),
+    path: URL(fileURLWithPath: "output.png")
+)
+print("Wrote \(bytes) bytes")
+```
+
+### PDF -- `POST /v1/pdf`
 
 ```swift
 var opts = PdfOptions(url: "https://example.com")
@@ -87,7 +108,7 @@ opts.landscape  = false
 let pdfBytes = try await client.pdf(opts)
 ```
 
-### Scrape — `POST /v1/scrape`
+### Scrape -- `POST /v1/scrape`
 
 ```swift
 var opts = ScrapeOptions(url: "https://example.com")
@@ -100,7 +121,7 @@ for item in result.results {
 }
 ```
 
-### Extract — `POST /v1/extract`
+### Extract -- `POST /v1/extract`
 
 ```swift
 // Convenience wrappers
@@ -118,11 +139,25 @@ opts.maxLength = 4096
 let result = try await client.extract(opts)
 ```
 
-### Quota — `GET /v1/quota`
+### Analyze -- `POST /v1/analyze`
+
+Uses an LLM provider to analyze webpage content. This endpoint may return
+HTTP 503 when LLM credits are exhausted on the server.
 
 ```swift
-let quota = try await client.quota()
-print("Used: \(quota.used) / \(quota.total) — \(quota.remaining) remaining")
+var opts = AnalyzeOptions(url: "https://example.com")
+opts.prompt   = "Summarize the main points of this page"
+opts.provider = .openai
+
+let result = try await client.analyze(opts)
+print(result.result)
+```
+
+### Usage -- `GET /v1/usage`
+
+```swift
+let usage = try await client.getUsage()
+print("Used: \(usage.used) / \(usage.total) -- \(usage.remaining) remaining")
 ```
 
 ## Error Handling
@@ -183,6 +218,40 @@ async let b = snapClient.screenshot(optsB)
 let (imgA, imgB) = try await (a, b)
 ```
 
+## iOS Use Cases
+
+Capture website screenshots in your iOS app:
+
+```swift
+// In a SwiftUI view model
+@MainActor
+class ViewModel: ObservableObject {
+    @Published var imageData: Data?
+    private let client = SnapAPIClient(apiKey: "sk_...")
+
+    func capture(url: String) async {
+        var opts = ScreenshotOptions(url: url)
+        opts.device = "iPhone 14 Pro"
+        opts.blockAds = true
+        imageData = try? await client.screenshot(opts)
+    }
+}
+```
+
+## macOS Use Cases
+
+Automated screenshot monitoring:
+
+```swift
+// Periodic website capture for visual regression
+let urls = ["https://example.com", "https://competitor.com"]
+for url in urls {
+    let data = try await client.screenshot(ScreenshotOptions(url: url))
+    let filename = "\(url.host ?? "site")_\(Date().timeIntervalSince1970).png"
+    try data.write(to: URL(fileURLWithPath: filename))
+}
+```
+
 ## Testing
 
 Inject a mock `URLSession` to test without network calls:
@@ -197,6 +266,14 @@ Run tests:
 ```bash
 swift test
 ```
+
+## Examples
+
+See the `Examples/` directory for complete working examples:
+
+- **BasicExample.swift** -- Quickstart covering all endpoints
+- **iOSExample.swift** -- SwiftUI integration with ViewModel pattern
+- **macOSMonitor.swift** -- Automated website monitoring tool
 
 ## License
 
