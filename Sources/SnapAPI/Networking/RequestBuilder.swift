@@ -5,7 +5,7 @@ struct RequestBuilder {
 
     let baseURL: URL
     let apiKey: String
-    private static let userAgent = "snapapi-swift/3.0.0"
+    private static let userAgent = "snapapi-swift/3.1.0"
 
     // MARK: - Builders
 
@@ -36,6 +36,7 @@ struct RequestBuilder {
         var req = URLRequest(url: url, timeoutInterval: 120)
         req.httpMethod = method
         req.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
+        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")

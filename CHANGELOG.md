@@ -5,6 +5,16 @@ All notable changes to the SnapAPI Swift SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-03-16
+
+### Added
+- `Authorization: Bearer` header sent alongside `X-Api-Key` for maximum server compatibility
+
+### Changed
+- API base URL corrected to `https://snapapi.pics` (was `https://api.snapapi.pics`)
+- `getUsage()` is now the primary method (calls `GET /v1/usage`); `quota()` is the alias
+- User-Agent updated to `snapapi-swift/3.1.0`
+
 ## [3.0.0] - 2026-03-16
 
 ### Added

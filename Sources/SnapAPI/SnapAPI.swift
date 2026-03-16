@@ -57,7 +57,7 @@ public actor SnapAPIClient {
     ///   - retryPolicy: Retry behaviour for transient errors.
     public init(
         apiKey: String,
-        baseURL: URL = URL(string: "https://api.snapapi.pics")!,
+        baseURL: URL = URL(string: "https://snapapi.pics")!,
         session: URLSession = .shared,
         retryPolicy: RetryPolicy = .default
     ) {
@@ -284,28 +284,28 @@ public actor SnapAPIClient {
         return try await http.json(for: req)
     }
 
-    // MARK: - Quota  GET /v1/quota
+    // MARK: - Usage  GET /v1/usage
 
-    /// Fetch the account's API usage quota for the current billing period.
+    /// Fetch the account's API usage for the current billing period.
     ///
     /// ```swift
-    /// let q = try await client.quota()
-    /// print("Used: \(q.used) / \(q.total)  —  resets \(q.resetAt ?? "?")")
+    /// let u = try await client.getUsage()
+    /// print("Used: \(u.used) / \(u.total)  —  resets \(u.resetAt ?? "?")")
     /// ```
     ///
     /// - Returns: ``QuotaResult`` with `used`, `total`, and `remaining` counts.
     /// - Throws: ``SnapAPIError``
-    public func quota() async throws -> QuotaResult {
-        let req = builder.get(path: "/v1/quota")
+    public func getUsage() async throws -> QuotaResult {
+        let req = builder.get(path: "/v1/usage")
         return try await http.json(for: req)
     }
 
-    /// Alias for ``quota()`` matching the `GET /v1/usage` endpoint name.
+    /// Alias for ``getUsage()``, kept for backward compatibility.
     ///
     /// - Returns: ``QuotaResult`` with `used`, `total`, and `remaining` counts.
     /// - Throws: ``SnapAPIError``
-    public func getUsage() async throws -> QuotaResult {
-        return try await quota()
+    public func quota() async throws -> QuotaResult {
+        return try await getUsage()
     }
 
     // MARK: - Ping  GET /v1/ping
