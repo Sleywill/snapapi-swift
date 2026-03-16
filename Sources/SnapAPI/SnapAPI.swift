@@ -57,7 +57,7 @@ public actor SnapAPIClient {
     ///   - retryPolicy: Retry behaviour for transient errors.
     public init(
         apiKey: String,
-        baseURL: URL = URL(string: "https://snapapi.pics")!,
+        baseURL: URL = URL(string: "https://api.snapapi.pics")!,
         session: URLSession = .shared,
         retryPolicy: RetryPolicy = .default
     ) {
