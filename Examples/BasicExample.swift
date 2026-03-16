@@ -80,5 +80,21 @@ private func runExamples(client: SnapAPIClient) async throws {
         print("  \(String(text.prefix(120)))...")
     }
 
+    // ── Analyze ─────────────────────────────────────────────────────────
+    print("\nAnalyzing page (may return 503 if LLM credits are down)...")
+    do {
+        var analyzeOpts = AnalyzeOptions(url: "https://example.com")
+        analyzeOpts.prompt   = "Summarize this page in one sentence"
+        analyzeOpts.provider = .openai
+        let analysis = try await client.analyze(analyzeOpts)
+        print("  Analysis: \(String(analysis.result.prefix(200)))...")
+    } catch SnapAPIError.serverError(let code, _) where code == 503 {
+        print("  Analyze endpoint unavailable (503 — LLM credits may be exhausted)")
+    }
+
+    // ── Usage ─────────────────────────────────────────────────────────────
+    let usage = try await client.getUsage()
+    print("\nUsage: \(usage.used)/\(usage.total) used, \(usage.remaining) remaining")
+
     print("\nDone.")
 }
