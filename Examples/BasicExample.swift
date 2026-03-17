@@ -17,7 +17,7 @@ struct BasicExample {
 
         do {
             try await runExamples(client: client)
-        } catch SnapAPIError.unauthorized {
+        } catch SnapAPIError.authenticationFailed {
             print("ERROR: invalid API key — set SNAPAPI_KEY environment variable")
         } catch SnapAPIError.rateLimited(let retryAfter) {
             print("ERROR: rate limited — retry after \(Int(retryAfter))s")
@@ -33,22 +33,33 @@ struct BasicExample {
 
 private func runExamples(client: SnapAPIClient) async throws {
 
-    // ── Quota check ────────────────────────────────────────────────────────
-    let q = try await client.quota()
-    print("Quota: \(q.used)/\(q.total) used (resets: \(q.resetAt ?? "unknown"))")
+    // -- Ping ------------------------------------------------------------------
+    let pong = try await client.ping()
+    print("Ping: \(pong.status) (\(pong.timestamp))")
 
-    // ── Screenshot ─────────────────────────────────────────────────────────
+    // -- Usage -----------------------------------------------------------------
+    let q = try await client.getUsage()
+    print("Usage: \(q.used)/\(q.total) used (resets: \(q.resetAt ?? "unknown"))")
+
+    // -- Screenshot ------------------------------------------------------------
     print("\nTaking screenshot...")
     var screenshotOpts = ScreenshotOptions(url: "https://example.com")
     screenshotOpts.format   = .png
     screenshotOpts.fullPage = true
     screenshotOpts.width    = 1440
+    screenshotOpts.blockAds = true
 
     let imageData = try await client.screenshot(screenshotOpts)
     try imageData.write(to: URL(fileURLWithPath: "screenshot.png"))
     print("Saved screenshot.png (\(imageData.count) bytes)")
 
-    // ── PDF ────────────────────────────────────────────────────────────────
+    // -- Screenshot from HTML -------------------------------------------------
+    let htmlData = try await client.screenshot(
+        ScreenshotOptions(html: "<h1 style='font-family:sans-serif'>Hello, SnapAPI!</h1>")
+    )
+    print("HTML screenshot: \(htmlData.count) bytes")
+
+    // -- PDF -------------------------------------------------------------------
     print("\nGenerating PDF...")
     var pdfOpts = PdfOptions(url: "https://example.com")
     pdfOpts.pageFormat = .a4
@@ -57,9 +68,9 @@ private func runExamples(client: SnapAPIClient) async throws {
     try pdfData.write(to: URL(fileURLWithPath: "page.pdf"))
     print("Saved page.pdf (\(pdfData.count) bytes)")
 
-    // ── Scrape ─────────────────────────────────────────────────────────────
+    // -- Scrape ----------------------------------------------------------------
     print("\nScraping...")
-    var scrapeOpts    = ScrapeOptions(url: "https://example.com")
+    var scrapeOpts = ScrapeOptions(url: "https://example.com")
     scrapeOpts.selector = "body"
 
     let scrapeResult = try await client.scrape(scrapeOpts)
@@ -68,19 +79,22 @@ private func runExamples(client: SnapAPIClient) async throws {
         print("  Page \(item.page): \(preview)...")
     }
 
-    // ── Extract ────────────────────────────────────────────────────────────
+    // -- Extract ---------------------------------------------------------------
     print("\nExtracting article...")
     let article = try await client.extractArticle(url: "https://example.com")
     print("  type=\(article.type)  responseTime=\(article.responseTime)ms")
 
-    // ── Extract Markdown ───────────────────────────────────────────────────
     print("\nExtracting as Markdown...")
     let md = try await client.extractMarkdown(url: "https://example.com")
-    if let text = md.data?.value as? String {
+    if case .string(let text) = md.data?.value {
         print("  \(String(text.prefix(120)))...")
     }
 
-    // ── Analyze ─────────────────────────────────────────────────────────
+    print("\nExtracting metadata...")
+    let meta = try await client.extractMetadata(url: "https://example.com")
+    print("  metadata type=\(meta.type)")
+
+    // -- Analyze ---------------------------------------------------------------
     print("\nAnalyzing page (may return 503 if LLM credits are down)...")
     do {
         var analyzeOpts = AnalyzeOptions(url: "https://example.com")
@@ -92,9 +106,9 @@ private func runExamples(client: SnapAPIClient) async throws {
         print("  Analyze endpoint unavailable (503 — LLM credits may be exhausted)")
     }
 
-    // ── Usage ─────────────────────────────────────────────────────────────
+    // -- Final usage -----------------------------------------------------------
     let usage = try await client.getUsage()
-    print("\nUsage: \(usage.used)/\(usage.total) used, \(usage.remaining) remaining")
+    print("\nFinal usage: \(usage.used)/\(usage.total) used, \(usage.remaining) remaining")
 
     print("\nDone.")
 }

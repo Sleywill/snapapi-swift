@@ -58,8 +58,8 @@ final class ScreenshotService {
     }
 
     /// Check remaining API quota.
-    func checkQuota() async throws -> QuotaResult {
-        return try await client.quota()
+    func checkQuota() async throws -> UsageResult {
+        return try await client.getUsage()
     }
 }
 
@@ -108,7 +108,7 @@ final class ScreenshotViewModel: ObservableObject {
                 errorMessage = "Rate limited. Try again in \(Int(retryAfter))s."
             case .quotaExceeded:
                 errorMessage = "API quota exceeded. Please upgrade your plan."
-            case .unauthorized:
+            case .authenticationFailed:
                 errorMessage = "Invalid API key. Check your configuration."
             default:
                 errorMessage = error.localizedDescription

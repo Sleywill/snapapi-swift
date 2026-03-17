@@ -7,7 +7,7 @@ final class ValidationTests: XCTestCase {
 
     func testScreenshotRequiresSource() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.screenshot(ScreenshotOptions())
         }
     }
@@ -26,49 +26,49 @@ final class ValidationTests: XCTestCase {
 
     func testScrapeRequiresURL() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.scrape(ScrapeOptions(url: ""))
         }
     }
 
     func testExtractRequiresURL() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.extract(ExtractOptions(url: ""))
         }
     }
 
     func testPdfRequiresURL() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.pdf(PdfOptions(url: ""))
         }
     }
 
     func testVideoRequiresURL() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.video(VideoOptions(url: ""))
         }
     }
 
     func testVideoResultRequiresURL() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.videoResult(VideoOptions(url: ""))
         }
     }
 
     func testScreenshotToStorageRequiresSource() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.screenshotToStorage(ScreenshotOptions())
         }
     }
 
     func testAnalyzeRequiresURL() async {
         let client = SnapAPIClient(apiKey: "test")
-        await assertThrows(SnapAPIError.invalidParameters("")) {
+        await assertThrowsSnapAPIError(.invalidParameters("")) {
             _ = try await client.analyze(AnalyzeOptions(url: ""))
         }
     }
@@ -85,7 +85,7 @@ final class ErrorTests: XCTestCase {
     }
 
     func testNetworkErrorIsRetryable() {
-        XCTAssertTrue(SnapAPIError.networkError(URLError(.timedOut)).isRetryable)
+        XCTAssertTrue(SnapAPIError.networkError(underlying: URLError(.timedOut)).isRetryable)
     }
 
     func testServerError5xxIsRetryable() {
@@ -98,8 +98,8 @@ final class ErrorTests: XCTestCase {
         XCTAssertFalse(SnapAPIError.serverError(statusCode: 404, message: "nope").isRetryable)
     }
 
-    func testUnauthorizedNotRetryable() {
-        XCTAssertFalse(SnapAPIError.unauthorized.isRetryable)
+    func testAuthenticationFailedNotRetryable() {
+        XCTAssertFalse(SnapAPIError.authenticationFailed.isRetryable)
     }
 
     func testQuotaExceededNotRetryable() {
@@ -111,7 +111,7 @@ final class ErrorTests: XCTestCase {
     }
 
     func testDecodingErrorNotRetryable() {
-        XCTAssertFalse(SnapAPIError.decodingError(NSError(domain: "d", code: 1)).isRetryable)
+        XCTAssertFalse(SnapAPIError.decodingError(underlying: NSError(domain: "d", code: 1)).isRetryable)
     }
 
     // MARK: retryAfter
@@ -123,13 +123,13 @@ final class ErrorTests: XCTestCase {
 
     func testRetryAfterNilForOtherErrors() {
         XCTAssertNil(SnapAPIError.serverError(statusCode: 500, message: "").retryAfter)
-        XCTAssertNil(SnapAPIError.unauthorized.retryAfter)
+        XCTAssertNil(SnapAPIError.authenticationFailed.retryAfter)
     }
 
     // MARK: errorDescription
 
-    func testUnauthorizedDescription() {
-        XCTAssertTrue(SnapAPIError.unauthorized.errorDescription!.contains("Unauthorized"))
+    func testAuthenticationFailedDescription() {
+        XCTAssertTrue(SnapAPIError.authenticationFailed.errorDescription!.contains("Authentication"))
     }
 
     func testRateLimitedDescription() {
@@ -149,7 +149,7 @@ final class ErrorTests: XCTestCase {
     }
 
     func testNetworkErrorDescription() {
-        let desc = SnapAPIError.networkError(URLError(.notConnectedToInternet)).errorDescription!
+        let desc = SnapAPIError.networkError(underlying: URLError(.notConnectedToInternet)).errorDescription!
         XCTAssertTrue(desc.contains("Network error"))
     }
 
@@ -245,28 +245,74 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(AnalyzeProvider.google.rawValue,    "google")
     }
 
-    func testAnyCodableString() throws {
+    // MARK: AnyCodable
+
+    func testAnyCodableStringRoundTrip() throws {
         let json = #"{"key":"hello"}"#.data(using: .utf8)!
         let d = try JSONDecoder().decode([String: AnyCodable].self, from: json)
-        XCTAssertEqual(d["key"]?.value as? String, "hello")
+        guard case .string(let s) = d["key"]?.value else {
+            XCTFail("Expected .string AnyJSON")
+            return
+        }
+        XCTAssertEqual(s, "hello")
     }
 
-    func testAnyCodableInt() throws {
+    func testAnyCodableIntRoundTrip() throws {
         let json = #"{"n":42}"#.data(using: .utf8)!
         let d = try JSONDecoder().decode([String: AnyCodable].self, from: json)
-        XCTAssertEqual(d["n"]?.value as? Int, 42)
+        guard case .int(let i) = d["n"]?.value else {
+            XCTFail("Expected .int AnyJSON")
+            return
+        }
+        XCTAssertEqual(i, 42)
     }
 
-    func testAnyCodableBool() throws {
+    func testAnyCodableBoolRoundTrip() throws {
         let json = #"{"flag":true}"#.data(using: .utf8)!
         let d = try JSONDecoder().decode([String: AnyCodable].self, from: json)
-        XCTAssertEqual(d["flag"]?.value as? Bool, true)
+        guard case .bool(let b) = d["flag"]?.value else {
+            XCTFail("Expected .bool AnyJSON")
+            return
+        }
+        XCTAssertTrue(b)
     }
 
     func testAnyCodableNull() throws {
         let json = #"{"x":null}"#.data(using: .utf8)!
         let d = try JSONDecoder().decode([String: AnyCodable].self, from: json)
         XCTAssertNotNil(d["x"])
+        if let val = d["x"] {
+            XCTAssertEqual(val.value, .null)
+        }
+    }
+
+    func testAnyCodableEncodeDecodeRoundTrip() throws {
+        let original: AnyCodable = ["name": "Alice", "age": 30, "active": true]
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: encoded)
+        XCTAssertEqual(original, decoded)
+    }
+
+    func testAnyCodableLiterals() {
+        let str: AnyCodable = "hello"
+        let num: AnyCodable = 42
+        let flag: AnyCodable = true
+        let nothing: AnyCodable = nil
+
+        XCTAssertEqual(str.value, .string("hello"))
+        XCTAssertEqual(num.value, .int(42))
+        XCTAssertEqual(flag.value, .bool(true))
+        XCTAssertEqual(nothing.value, .null)
+    }
+
+    func testAnyCodableDynamicMemberLookup() throws {
+        let json = #"{"user":{"name":"Bob"}}"#.data(using: .utf8)!
+        let d = try JSONDecoder().decode(AnyCodable.self, from: json)
+        guard case .string(let name) = d.user?.name?.value else {
+            XCTFail("Dynamic member lookup failed")
+            return
+        }
+        XCTAssertEqual(name, "Bob")
     }
 
     func testSnapCookieInit() {
@@ -292,36 +338,108 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(opts.prompt, "Summarize")
         XCTAssertEqual(opts.provider, .openai)
     }
+
+    func testVideoOptionsFullPage() {
+        var opts = VideoOptions(url: "https://example.com")
+        opts.fullPage = true
+        XCTAssertEqual(opts.fullPage, true)
+    }
+
+    func testPDFPageOptionsInit() {
+        let opts = PDFPageOptions(
+            pageSize: .a4,
+            landscape: true,
+            marginTop: "1cm",
+            marginRight: "1cm",
+            marginBottom: "1cm",
+            marginLeft: "1cm"
+        )
+        XCTAssertEqual(opts.pageSize, .a4)
+        XCTAssertEqual(opts.landscape, true)
+        XCTAssertEqual(opts.marginTop, "1cm")
+    }
+
+    func testScreenshotOptionsEncoding() throws {
+        var opts = ScreenshotOptions(url: "https://example.com")
+        opts.fullPage = true
+        opts.darkMode = true
+        opts.format = .jpeg
+        opts.width = 1280
+        opts.blockAds = true
+
+        let data = try JSONEncoder.snapAPI.encode(opts)
+        let json = try JSONDecoder().decode([String: AnyCodable].self, from: data)
+
+        // The encoder uses snake_case — verify keys
+        XCTAssertNotNil(json["full_page"])
+        XCTAssertNotNil(json["dark_mode"])
+        XCTAssertNotNil(json["block_ads"])
+    }
+
+    func testScrapeOptionsEncoding() throws {
+        var opts = ScrapeOptions(url: "https://example.com")
+        opts.selector = "article"
+        opts.wait = 500
+        opts.pages = 3
+
+        let data = try JSONEncoder.snapAPI.encode(opts)
+        let json = try JSONDecoder().decode([String: AnyCodable].self, from: data)
+
+        XCTAssertNotNil(json["url"])
+        XCTAssertNotNil(json["selector"])
+        XCTAssertNotNil(json["wait"])
+        XCTAssertNotNil(json["pages"])
+    }
+
+    func testExtractFormatAllCases() {
+        let allFormats: [ExtractFormat] = [
+            .markdown, .text, .html, .article, .links, .images, .metadata, .structured
+        ]
+        XCTAssertEqual(ExtractFormat.allCases.count, allFormats.count)
+    }
 }
 
-// MARK: - HTTP Tests (using mock URLSession)
+// MARK: - HTTP Tests (using URLProtocol mock)
 
 final class HTTPClientTests: XCTestCase {
 
-    func testUnauthorizedResponseThrowsUnauthorized() async throws {
-        let session = MockURLSession(statusCode: 401, data: Data())
-        let client = SnapAPIClient(
-            apiKey: "bad-key",
+    private func makeClient(response: MockResponse, retryPolicy: RetryPolicy = .never) -> SnapAPIClient {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        MockURLProtocol.response = response
+        let session = URLSession(configuration: config)
+        return SnapAPIClient(
+            apiKey: "sk_test",
+            baseURL: URL(string: "https://api.snapapi.pics")!,
             session: session,
-            retryPolicy: .never
+            retryPolicy: retryPolicy
         )
+    }
+
+    func testUnauthorizedResponseThrowsAuthenticationFailed() async throws {
+        let client = makeClient(response: MockResponse(statusCode: 401, data: Data()))
         do {
-            _ = try await client.quota()
-            XCTFail("Expected unauthorized error")
-        } catch SnapAPIError.unauthorized {
+            _ = try await client.getUsage()
+            XCTFail("Expected authenticationFailed error")
+        } catch SnapAPIError.authenticationFailed {
+            // pass
+        }
+    }
+
+    func testForbiddenResponseThrowsAuthenticationFailed() async throws {
+        let client = makeClient(response: MockResponse(statusCode: 403, data: Data()))
+        do {
+            _ = try await client.ping()
+            XCTFail("Expected authenticationFailed error")
+        } catch SnapAPIError.authenticationFailed {
             // pass
         }
     }
 
     func testQuotaExceededResponse() async throws {
-        let session = MockURLSession(statusCode: 402, data: Data())
-        let client = SnapAPIClient(
-            apiKey: "sk_test",
-            session: session,
-            retryPolicy: .never
-        )
+        let client = makeClient(response: MockResponse(statusCode: 402, data: Data()))
         do {
-            _ = try await client.quota()
+            _ = try await client.getUsage()
             XCTFail("Expected quotaExceeded error")
         } catch SnapAPIError.quotaExceeded {
             // pass
@@ -329,18 +447,13 @@ final class HTTPClientTests: XCTestCase {
     }
 
     func testRateLimitedResponseWith429() async throws {
-        let session = MockURLSession(
+        let client = makeClient(response: MockResponse(
             statusCode: 429,
             data: Data(),
             headers: ["Retry-After": "30"]
-        )
-        let client = SnapAPIClient(
-            apiKey: "sk_test",
-            session: session,
-            retryPolicy: .never
-        )
+        ))
         do {
-            _ = try await client.quota()
+            _ = try await client.getUsage()
             XCTFail("Expected rateLimited error")
         } catch SnapAPIError.rateLimited(let retryAfter) {
             XCTAssertEqual(retryAfter, 30)
@@ -350,14 +463,9 @@ final class HTTPClientTests: XCTestCase {
     func testServerErrorResponse() async throws {
         let body = #"{"error":"INTERNAL_ERROR","message":"Something went wrong"}"#
             .data(using: .utf8)!
-        let session = MockURLSession(statusCode: 500, data: body)
-        let client = SnapAPIClient(
-            apiKey: "sk_test",
-            session: session,
-            retryPolicy: .never
-        )
+        let client = makeClient(response: MockResponse(statusCode: 500, data: body))
         do {
-            _ = try await client.quota()
+            _ = try await client.getUsage()
             XCTFail("Expected serverError")
         } catch SnapAPIError.serverError(let code, let msg) {
             XCTAssertEqual(code, 500)
@@ -365,48 +473,64 @@ final class HTTPClientTests: XCTestCase {
         }
     }
 
-    func testSuccessfulQuotaDecoding() async throws {
+    func testSuccessfulUsageDecoding() async throws {
         let body = #"{"used":120,"total":1000,"remaining":880}"#.data(using: .utf8)!
-        let session = MockURLSession(statusCode: 200, data: body)
-        let client = SnapAPIClient(apiKey: "sk_test", session: session, retryPolicy: .never)
-        let quota = try await client.quota()
-        XCTAssertEqual(quota.used,      120)
-        XCTAssertEqual(quota.total,     1000)
-        XCTAssertEqual(quota.remaining, 880)
+        let client = makeClient(response: MockResponse(statusCode: 200, data: body))
+        let usage = try await client.getUsage()
+        XCTAssertEqual(usage.used,      120)
+        XCTAssertEqual(usage.total,     1000)
+        XCTAssertEqual(usage.remaining, 880)
     }
 
-    func testGetUsageIsAliasForQuota() async throws {
+    func testSuccessfulQuotaDecoding() async throws {
         let body = #"{"used":50,"total":500,"remaining":450}"#.data(using: .utf8)!
-        let session = MockURLSession(statusCode: 200, data: body)
-        let client = SnapAPIClient(apiKey: "sk_test", session: session, retryPolicy: .never)
-        let usage = try await client.getUsage()
-        XCTAssertEqual(usage.used, 50)
-        XCTAssertEqual(usage.remaining, 450)
+        let client = makeClient(response: MockResponse(statusCode: 200, data: body))
+        let quota = try await client.quota()
+        XCTAssertEqual(quota.used, 50)
+        XCTAssertEqual(quota.remaining, 450)
     }
 
     func testSuccessfulScreenshot() async throws {
-        let imageBytes = Data([0x89, 0x50, 0x4E, 0x47]) // PNG header
-        let session = MockURLSession(statusCode: 200, data: imageBytes)
-        let client = SnapAPIClient(apiKey: "sk_test", session: session, retryPolicy: .never)
+        let imageBytes = Data([0x89, 0x50, 0x4E, 0x47]) // PNG magic bytes
+        let client = makeClient(response: MockResponse(statusCode: 200, data: imageBytes))
         let result = try await client.screenshot(ScreenshotOptions(url: "https://example.com"))
         XCTAssertEqual(result, imageBytes)
     }
 
-    func testXApiKeyHeaderIsSent() async throws {
-        // Verify the client sends X-Api-Key header
-        let body = #"{"used":1,"total":100,"remaining":99}"#.data(using: .utf8)!
-        let session = MockURLSession(statusCode: 200, data: body)
-        let client = SnapAPIClient(apiKey: "sk_test_key", session: session, retryPolicy: .never)
-        _ = try await client.quota()
-        // If we got here without error, the request was made successfully.
-        // The header verification is implicit in the mock setup.
+    func testSuccessfulPing() async throws {
+        let body = #"{"status":"ok","timestamp":1710000000000}"#.data(using: .utf8)!
+        let client = makeClient(response: MockResponse(statusCode: 200, data: body))
+        let ping = try await client.ping()
+        XCTAssertEqual(ping.status, "ok")
+        XCTAssertEqual(ping.timestamp, 1_710_000_000_000)
+    }
+
+    func testSuccessfulScrape() async throws {
+        let body = #"{"success":true,"results":[{"page":1,"url":"https://example.com","data":"hello"}]}"#
+            .data(using: .utf8)!
+        let client = makeClient(response: MockResponse(statusCode: 200, data: body))
+        let result = try await client.scrape(ScrapeOptions(url: "https://example.com"))
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.results.count, 1)
+        XCTAssertEqual(result.results[0].page, 1)
+        XCTAssertEqual(result.results[0].data, "hello")
+    }
+
+    func testSuccessfulExtract() async throws {
+        // Use string concatenation to avoid raw-string delimiter conflicts
+        let bodyStr = "{\"success\":true,\"type\":\"markdown\",\"url\":\"https://example.com\",\"data\":\"Hello\",\"response_time\":250}"
+        let body = bodyStr.data(using: .utf8)!
+        let client = makeClient(response: MockResponse(statusCode: 200, data: body))
+        let result = try await client.extract(ExtractOptions(url: "https://example.com"))
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.type, "markdown")
+        XCTAssertEqual(result.responseTime, 250)
     }
 
     func testAnalyze503ReturnsServerError() async throws {
         let body = #"{"error":"SERVICE_UNAVAILABLE","message":"LLM credits exhausted"}"#
             .data(using: .utf8)!
-        let session = MockURLSession(statusCode: 503, data: body)
-        let client = SnapAPIClient(apiKey: "sk_test", session: session, retryPolicy: .never)
+        let client = makeClient(response: MockResponse(statusCode: 503, data: body))
         do {
             _ = try await client.analyze(AnalyzeOptions(url: "https://example.com"))
             XCTFail("Expected serverError")
@@ -415,41 +539,230 @@ final class HTTPClientTests: XCTestCase {
             XCTAssertTrue(msg.contains("LLM credits exhausted"))
         }
     }
+
+    func testDecodingErrorOnMalformedJSON() async throws {
+        let body = "not json at all".data(using: .utf8)!
+        let client = makeClient(response: MockResponse(statusCode: 200, data: body))
+        do {
+            _ = try await client.getUsage()
+            XCTFail("Expected decodingError")
+        } catch SnapAPIError.decodingError {
+            // pass
+        }
+    }
+
+    func testXApiKeyHeaderIsSent() async throws {
+        let body = #"{"used":1,"total":100,"remaining":99}"#.data(using: .utf8)!
+        // Use a custom URLProtocol that inspects the request header
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeaderCapturingURLProtocol.self]
+        HeaderCapturingURLProtocol.response = MockResponse(statusCode: 200, data: body)
+        let session = URLSession(configuration: config)
+        let client = SnapAPIClient(
+            apiKey: "sk_test_header_check",
+            baseURL: URL(string: "https://api.snapapi.pics")!,
+            session: session,
+            retryPolicy: .never
+        )
+        _ = try await client.getUsage()
+        XCTAssertEqual(HeaderCapturingURLProtocol.capturedAPIKey, "sk_test_header_check")
+    }
+
+    func testAuthorizationBearerHeaderIsSent() async throws {
+        let body = #"{"used":1,"total":100,"remaining":99}"#.data(using: .utf8)!
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeaderCapturingURLProtocol.self]
+        HeaderCapturingURLProtocol.response = MockResponse(statusCode: 200, data: body)
+        let session = URLSession(configuration: config)
+        let client = SnapAPIClient(
+            apiKey: "sk_bearer_test",
+            baseURL: URL(string: "https://api.snapapi.pics")!,
+            session: session,
+            retryPolicy: .never
+        )
+        _ = try await client.getUsage()
+        XCTAssertEqual(HeaderCapturingURLProtocol.capturedAuthHeader, "Bearer sk_bearer_test")
+    }
+
+    func testRetryOnNetworkFailure() async throws {
+        // Switch to failure protocol after first attempt
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [FailOnceURLProtocol.self]
+        FailOnceURLProtocol.callCount = 0
+        let successBody = #"{"used":5,"total":100,"remaining":95}"#.data(using: .utf8)!
+        FailOnceURLProtocol.successResponse = MockResponse(statusCode: 200, data: successBody)
+        let session = URLSession(configuration: config)
+        let client = SnapAPIClient(
+            apiKey: "sk_test",
+            baseURL: URL(string: "https://api.snapapi.pics")!,
+            session: session,
+            retryPolicy: RetryPolicy(maxAttempts: 2, baseDelay: 0.001, maxDelay: 0.001)
+        )
+        let usage = try await client.getUsage()
+        XCTAssertEqual(usage.used, 5)
+        XCTAssertEqual(FailOnceURLProtocol.callCount, 2)
+    }
 }
 
-// MARK: - Mock URLSession
+// MARK: - Request Builder Tests
 
-/// A `URLSession` subclass that returns pre-canned responses for testing.
-final class MockURLSession: URLSession, @unchecked Sendable {
+final class RequestBuilderTests: XCTestCase {
 
-    private let statusCode: Int
-    private let data: Data
-    private let headers: [String: String]
+    private let builder = RequestBuilder(
+        baseURL: URL(string: "https://api.snapapi.pics")!,
+        apiKey: "sk_test_builder"
+    )
+
+    func testGetRequestMethod() {
+        let req = builder.get(path: "/v1/ping")
+        XCTAssertEqual(req.httpMethod, "GET")
+    }
+
+    func testPostRequestMethod() throws {
+        struct Empty: Encodable {}
+        let req = try builder.post(path: "/v1/screenshot", body: Empty())
+        XCTAssertEqual(req.httpMethod, "POST")
+    }
+
+    func testDeleteRequestMethod() {
+        let req = builder.delete(path: "/v1/something")
+        XCTAssertEqual(req.httpMethod, "DELETE")
+    }
+
+    func testBaseURLComposedCorrectly() {
+        let req = builder.get(path: "/v1/ping")
+        XCTAssertEqual(req.url?.absoluteString, "https://api.snapapi.pics/v1/ping")
+    }
+
+    func testApiKeyHeaderSet() {
+        let req = builder.get(path: "/v1/ping")
+        XCTAssertEqual(req.value(forHTTPHeaderField: "X-Api-Key"), "sk_test_builder")
+    }
+
+    func testAuthorizationHeaderSet() {
+        let req = builder.get(path: "/v1/ping")
+        XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer sk_test_builder")
+    }
+
+    func testContentTypeSetOnPost() throws {
+        struct Empty: Encodable {}
+        let req = try builder.post(path: "/v1/screenshot", body: Empty())
+        XCTAssertEqual(req.value(forHTTPHeaderField: "Content-Type"), "application/json")
+    }
+
+    func testTimeoutInterval() {
+        let req = builder.get(path: "/v1/ping")
+        XCTAssertEqual(req.timeoutInterval, 120)
+    }
+
+    func testUserAgentHeader() {
+        let req = builder.get(path: "/v1/ping")
+        let ua = req.value(forHTTPHeaderField: "User-Agent")
+        XCTAssertNotNil(ua)
+        XCTAssertTrue(ua!.hasPrefix("snapapi-swift/"))
+    }
+}
+
+// MARK: - MockURLProtocol
+
+/// Canned-response mock using URLProtocol — works with async/await and actors.
+struct MockResponse: Sendable {
+    let statusCode: Int
+    let data: Data
+    let headers: [String: String]
 
     init(statusCode: Int, data: Data, headers: [String: String] = [:]) {
         self.statusCode = statusCode
         self.data       = data
         self.headers    = headers
-        // URLSession.init() is not available to subclass directly in test targets.
-        // We call the designated initialiser with a default configuration.
-        super.init(configuration: .ephemeral)
+    }
+}
+
+final class MockURLProtocol: URLProtocol, @unchecked Sendable {
+    // nonisolated(unsafe) so tests can set this from synchronous code
+    nonisolated(unsafe) static var response: MockResponse = MockResponse(statusCode: 200, data: Data())
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let r = Self.response
+        let httpResponse = HTTPURLResponse(
+            url: request.url!,
+            statusCode: r.statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: r.headers
+        )!
+        client?.urlProtocol(self, didReceive: httpResponse, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: r.data)
+        client?.urlProtocolDidFinishLoading(self)
     }
 
-    override func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        let response = HTTPURLResponse(
+    override func stopLoading() {}
+}
+
+/// URLProtocol that captures headers for inspection.
+final class HeaderCapturingURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var response: MockResponse = MockResponse(statusCode: 200, data: Data())
+    nonisolated(unsafe) static var capturedAPIKey: String? = nil
+    nonisolated(unsafe) static var capturedAuthHeader: String? = nil
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.capturedAPIKey    = request.value(forHTTPHeaderField: "X-Api-Key")
+        Self.capturedAuthHeader = request.value(forHTTPHeaderField: "Authorization")
+
+        let r = Self.response
+        let httpResponse = HTTPURLResponse(
             url: request.url!,
-            statusCode: statusCode,
-            httpVersion: nil,
-            headerFields: headers
+            statusCode: r.statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: r.headers
         )!
-        return (data, response)
+        client?.urlProtocol(self, didReceive: httpResponse, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: r.data)
+        client?.urlProtocolDidFinishLoading(self)
     }
+
+    override func stopLoading() {}
+}
+
+/// URLProtocol that fails on the first call and succeeds on subsequent calls.
+final class FailOnceURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var callCount: Int = 0
+    nonisolated(unsafe) static var successResponse: MockResponse = MockResponse(statusCode: 200, data: Data())
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.callCount += 1
+        if Self.callCount == 1 {
+            // Fail the first attempt with a network error
+            client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+        } else {
+            let r = Self.successResponse
+            let httpResponse = HTTPURLResponse(
+                url: request.url!,
+                statusCode: r.statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: [:]
+            )!
+            client?.urlProtocol(self, didReceive: httpResponse, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: r.data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 // MARK: - Helpers
 
-/// Asserts that the closure throws a ``SnapAPIError`` with the expected case.
-private func assertThrows<T>(
+/// Asserts that the closure throws a ``SnapAPIError`` matching the expected case label.
+private func assertThrowsSnapAPIError<T>(
     _ expected: SnapAPIError,
     file: StaticString = #filePath,
     line: UInt = #line,
@@ -459,12 +772,9 @@ private func assertThrows<T>(
         _ = try await body()
         XCTFail("Expected error to be thrown", file: file, line: line)
     } catch let err as SnapAPIError {
-        // Compare case names (not associated values) via string description
-        let got = "\(err)"
-        let exp = "\(expected)"
-        // Only compare the leading case label (before first parenthesis)
-        let gotLabel = got.prefix(while: { $0 != "(" })
-        let expLabel = exp.prefix(while: { $0 != "(" })
+        // Compare case names only (ignore associated values)
+        let gotLabel = "\(err)".prefix(while: { $0 != "(" })
+        let expLabel = "\(expected)".prefix(while: { $0 != "(" })
         XCTAssertEqual(String(gotLabel), String(expLabel), file: file, line: line)
     } catch {
         XCTFail("Expected SnapAPIError but got \(error)", file: file, line: line)
