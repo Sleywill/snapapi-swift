@@ -7,21 +7,54 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Build & Test
+  test-macos:
+    name: Build & Test (macOS)
     runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+        # Use the latest available Xcode 16.x on the runner; fall back gracefully.
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE_PATH" ]; then
+            sudo xcode-select -s "$XCODE_PATH"
+          else
+            echo "No Xcode 16.x found — using runner default"
+          fi
 
       - name: Swift version
         run: swift --version
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build (debug)
+        run: swift build
 
       - name: Build (release)
         run: swift build -c release
 
       - name: Test
-        run: swift test --enable-test-discovery
+        run: swift test
+
+  test-linux:
+    name: Build & Test (Linux / Swift 5.10)
+    runs-on: ubuntu-latest
+    container: swift:5.10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
