@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Builds authenticated ``URLRequest`` values for the SnapAPI REST API.
 struct RequestBuilder {
@@ -45,6 +48,8 @@ struct RequestBuilder {
 }
 
 // MARK: - Shared JSON encoder
+
+// MARK: - Shared JSON encoder / decoder
 
 extension JSONEncoder {
     /// A shared encoder configured for SnapAPI's snake_case wire format.
