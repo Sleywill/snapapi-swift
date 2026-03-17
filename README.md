@@ -2,6 +2,7 @@
 
 [![Swift 5.9+](https://img.shields.io/badge/Swift-5.9+-F05138?style=flat-square&logo=swift&logoColor=white)](https://swift.org)
 [![SPM](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-FA7343?style=flat-square)](https://swift.org/package-manager/)
+[![Version](https://img.shields.io/badge/version-3.1.0-6366f1?style=flat-square)](https://github.com/Sleywill/snapapi-swift/releases/tag/3.1.0)
 [![CI](https://github.com/Sleywill/snapapi-swift/actions/workflows/ci.yml/badge.svg)](https://github.com/Sleywill/snapapi-swift/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
@@ -461,6 +462,14 @@ let client = SnapAPIClient(
     baseURL: URL(string: "https://staging.api.snapapi.pics")!
 )
 ```
+
+## Links
+
+- [SnapAPI Website](https://snapapi.pics)
+- [API Documentation](https://snapapi.pics/docs)
+- [GitHub Repository](https://github.com/Sleywill/snapapi-swift)
+- [Changelog](./CHANGELOG.md)
+- [Report Issues](https://github.com/Sleywill/snapapi-swift/issues)
 
 ## License
 
