@@ -53,7 +53,21 @@ actor HTTPClient {
     private func performOnce(request: URLRequest) async throws -> Data {
         let (data, response): (Data, URLResponse)
         do {
+            #if canImport(FoundationNetworking)
+            // FoundationNetworking on Linux does not expose async data(for:).
+            // Bridge the completion-handler API to async/await via a continuation.
+            (data, response) = try await withCheckedThrowingContinuation { continuation in
+                session.dataTask(with: request) { d, r, e in
+                    if let e = e { continuation.resume(throwing: e); return }
+                    guard let d = d, let r = r else {
+                        continuation.resume(throwing: URLError(.badServerResponse)); return
+                    }
+                    continuation.resume(returning: (d, r))
+                }.resume()
+            }
+            #else
             (data, response) = try await session.data(for: request)
+            #endif
         } catch {
             throw SnapAPIError.networkError(underlying: error)
         }
