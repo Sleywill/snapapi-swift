@@ -1,9 +1,9 @@
 import Foundation
 
-// MARK: - QuotaResult
+// MARK: - UsageResult
 
-/// Returned by `GET /v1/quota`.
-public struct QuotaResult: Decodable, Sendable {
+/// Returned by `GET /v1/usage` and `GET /v1/quota`.
+public struct UsageResult: Decodable, Sendable {
     /// Number of API calls used in the current billing period.
     public let used: Int
     /// Total calls allowed in the current billing period.
@@ -13,6 +13,9 @@ public struct QuotaResult: Decodable, Sendable {
     /// ISO 8601 timestamp when the quota resets.
     public let resetAt: String?
 }
+
+/// Backwards-compatible alias for ``UsageResult``.
+public typealias QuotaResult = UsageResult
 
 // MARK: - PingResult
 

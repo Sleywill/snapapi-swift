@@ -20,8 +20,8 @@ import Foundation
 /// // Extract
 /// let md = try await client.extract(ExtractOptions(url: "https://news.ycombinator.com"))
 ///
-/// // Quota
-/// let q = try await client.quota()
+/// // Usage
+/// let q = try await client.getUsage()
 /// print("Used: \(q.used) / \(q.total)")
 /// ```
 ///
@@ -42,9 +42,6 @@ public actor SnapAPIClient {
 
     private let http: HTTPClient
     private let builder: RequestBuilder
-
-    // MARK: - Defaults
-
 
     // MARK: - Init
 
@@ -293,19 +290,22 @@ public actor SnapAPIClient {
     /// print("Used: \(u.used) / \(u.total)  —  resets \(u.resetAt ?? "?")")
     /// ```
     ///
-    /// - Returns: ``QuotaResult`` with `used`, `total`, and `remaining` counts.
+    /// - Returns: ``UsageResult`` with `used`, `total`, and `remaining` counts.
     /// - Throws: ``SnapAPIError``
-    public func getUsage() async throws -> QuotaResult {
+    public func getUsage() async throws -> UsageResult {
         let req = builder.get(path: "/v1/usage")
         return try await http.json(for: req)
     }
 
-    /// Alias for ``getUsage()``, kept for backward compatibility.
+    // MARK: - Quota  GET /v1/quota
+
+    /// Fetch the account's quota summary for the current billing period.
     ///
-    /// - Returns: ``QuotaResult`` with `used`, `total`, and `remaining` counts.
+    /// - Returns: ``UsageResult`` with `used`, `total`, and `remaining` counts.
     /// - Throws: ``SnapAPIError``
-    public func quota() async throws -> QuotaResult {
-        return try await getUsage()
+    public func quota() async throws -> UsageResult {
+        let req = builder.get(path: "/v1/quota")
+        return try await http.json(for: req)
     }
 
     // MARK: - Ping  GET /v1/ping

@@ -50,6 +50,9 @@ public struct VideoOptions: Encodable, Sendable {
     /// Frames per second (1–60).
     public var fps: Int?
 
+    /// Capture the full scrollable page height.
+    public var fullPage: Bool?
+
     // MARK: Scroll animation
 
     /// Enable automatic page scrolling during recording.

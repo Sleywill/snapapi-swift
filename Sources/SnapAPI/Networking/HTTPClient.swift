@@ -41,7 +41,7 @@ actor HTTPClient {
         do {
             return try JSONDecoder.snapAPI.decode(R.self, from: raw)
         } catch {
-            throw SnapAPIError.decodingError(error)
+            throw SnapAPIError.decodingError(underlying: error)
         }
     }
 
@@ -52,11 +52,11 @@ actor HTTPClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw SnapAPIError.networkError(error)
+            throw SnapAPIError.networkError(underlying: error)
         }
 
         guard let http = response as? HTTPURLResponse else {
-            throw SnapAPIError.networkError(URLError(.badServerResponse))
+            throw SnapAPIError.networkError(underlying: URLError(.badServerResponse))
         }
 
         guard http.statusCode >= 200, http.statusCode < 300 else {
