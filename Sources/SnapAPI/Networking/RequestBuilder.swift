@@ -8,7 +8,7 @@ struct RequestBuilder {
 
     let baseURL: URL
     let apiKey: String
-    private static let userAgent = "snapapi-swift/3.1.0"
+    private static let userAgent = "snapapi-swift/3.2.0"
 
     // MARK: - Builders
 

@@ -5,6 +5,17 @@ All notable changes to the SnapAPI Swift SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-03-28
+
+### Added
+- CocoaPods support via `SnapAPI.podspec`.
+- Test suite split into `ScreenshotTests.swift`, `ScrapeTests.swift`, `ErrorTests.swift`, and `TestHelpers.swift` for better organization.
+- Dedicated `TestHelpers.swift` with reusable mock infrastructure (`MockURLProtocol`, `HeaderCapturingURLProtocol`, `FailOnceURLProtocol`).
+
+### Changed
+- Platform minimums lowered: macOS 12+, iOS 15+, watchOS 8+, tvOS 15+ (from macOS 13, iOS 16, watchOS 9, tvOS 16) for broader device compatibility.
+- User-Agent updated to `snapapi-swift/3.2.0`.
+
 ## [3.1.0] - 2026-03-17
 
 ### Added

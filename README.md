@@ -2,22 +2,22 @@
 
 [![Swift 5.9+](https://img.shields.io/badge/Swift-5.9+-F05138?style=flat-square&logo=swift&logoColor=white)](https://swift.org)
 [![SPM](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-FA7343?style=flat-square)](https://swift.org/package-manager/)
-[![Version](https://img.shields.io/badge/version-3.1.0-6366f1?style=flat-square)](https://github.com/Sleywill/snapapi-swift/releases/tag/3.1.0)
+[![Version](https://img.shields.io/badge/version-3.2.0-6366f1?style=flat-square)](https://github.com/Sleywill/snapapi-swift/releases/tag/3.2.0)
 [![CI](https://github.com/Sleywill/snapapi-swift/actions/workflows/ci.yml/badge.svg)](https://github.com/Sleywill/snapapi-swift/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 Official Swift SDK for [SnapAPI.pics](https://snapapi.pics) — screenshot, scrape, extract, analyze, PDF, and video as a service.
 
-**v3.1.0** — Actor-based, strict concurrency, zero third-party dependencies.
+**v3.2.0** — Actor-based, strict concurrency, zero third-party dependencies.
 
 ## Requirements
 
 | Platform | Minimum |
 |----------|---------|
-| macOS    | 13.0    |
-| iOS      | 16.0    |
-| watchOS  | 9.0     |
-| tvOS     | 16.0    |
+| macOS    | 12.0    |
+| iOS      | 15.0    |
+| watchOS  | 8.0     |
+| tvOS     | 15.0    |
 | Swift    | 5.9     |
 
 ## Installation
@@ -26,13 +26,27 @@ Official Swift SDK for [SnapAPI.pics](https://snapapi.pics) — screenshot, scra
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Sleywill/snapapi-swift", from: "3.1.0")
+    .package(url: "https://github.com/Sleywill/snapapi-swift", from: "3.2.0")
 ],
 targets: [
     .target(name: "YourTarget", dependencies: [
         .product(name: "SnapAPI", package: "snapapi-swift")
     ])
 ]
+```
+
+### CocoaPods
+
+Add to your `Podfile`:
+
+```ruby
+pod 'SnapAPI', '~> 3.2.0'
+```
+
+Then run:
+
+```bash
+pod install
 ```
 
 ### Xcode
@@ -462,6 +476,20 @@ let client = SnapAPIClient(
     baseURL: URL(string: "https://staging.api.snapapi.pics")!
 )
 ```
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a PR.
+
+```bash
+git clone https://github.com/Sleywill/snapapi-swift.git
+cd snapapi-swift
+swift package resolve
+swift test
+```
+
+Found a bug? [Open an issue](https://github.com/Sleywill/snapapi-swift/issues/new?template=bug_report.md).
+Have an idea? [Request a feature](https://github.com/Sleywill/snapapi-swift/issues/new?template=feature_request.md).
 
 ## Links
 

@@ -7,11 +7,22 @@ public struct UsageResult: Decodable, Sendable {
     /// Number of API calls used in the current billing period.
     public let used: Int
     /// Total calls allowed in the current billing period.
+    ///
+    /// The API wire format uses the key `"limit"` for this value;
+    /// the SDK maps it to `total` for a more intuitive Swift API.
     public let total: Int
     /// Remaining calls.
     public let remaining: Int
     /// ISO 8601 timestamp when the quota resets.
     public let resetAt: String?
+
+    // The live API returns `limit` instead of `total`, so we map it.
+    private enum CodingKeys: String, CodingKey {
+        case used
+        case total = "limit"
+        case remaining
+        case resetAt
+    }
 }
 
 /// Backwards-compatible alias for ``UsageResult``.

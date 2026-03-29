@@ -300,14 +300,18 @@ public actor SnapAPIClient {
         return try await http.json(for: req)
     }
 
-    // MARK: - Quota  GET /v1/quota
+    // MARK: - Quota  (alias for GET /v1/usage)
 
     /// Fetch the account's quota summary for the current billing period.
+    ///
+    /// This is an alias for ``getUsage()``. The standalone `/v1/quota` route
+    /// does not exist on the server; both methods call `/v1/usage`.
     ///
     /// - Returns: ``UsageResult`` with `used`, `total`, and `remaining` counts.
     /// - Throws: ``SnapAPIError``
     public func quota() async throws -> UsageResult {
-        let req = builder.get(path: "/v1/quota")
+        // NOTE: /v1/quota returns 404 on the server; route to /v1/usage instead.
+        let req = builder.get(path: "/v1/usage")
         return try await http.json(for: req)
     }
 

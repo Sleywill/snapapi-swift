@@ -14,10 +14,10 @@ let swiftSettings: [SwiftSetting] = [
 let package = Package(
     name: "SnapAPI",
     platforms: [
-        .macOS(.v13),
-        .iOS(.v16),
-        .watchOS(.v9),
-        .tvOS(.v16),
+        .macOS(.v12),
+        .iOS(.v15),
+        .watchOS(.v8),
+        .tvOS(.v15),
     ],
     products: [
         .library(
